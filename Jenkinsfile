@@ -9,11 +9,10 @@ pipeline {
         GIT_REPOSITORY_URL = 'https://github.com/monkeymagician/fast.git'
         GIT_CREDENTIONALS_ID = 'git_cre'
 
-        // [수정 1] 아래 변수 3개가 없어서 에러가 났었습니다. 추가했습니다.
-        // 배포용(Manifest) 파일이 있는 레포지토리 주소 (현재 같은 레포라면 위와 동일하게)
+        // [중요] 배포용(Manifest) 파일이 있는 레포지토리 주소
         GIT_REPOSITORY_DEP = 'https://github.com/monkeymagician/fast.git' 
         
-        // 깃 허브에 커밋할 때 기록될 이름과 이메일 (본인 것으로 수정하세요)
+        // [중요] 깃 허브 커밋용 이메일/이름
         GIT_EMAIL = 'monkeymagician@example.com'
         GIT_NAME = 'monkeymagician'
 
@@ -90,4 +89,36 @@ pipeline {
 
         stage('5.EKS manifest file update') {
             steps {
-                // 여기서 GIT_REPOSITORY_DEP
+                git credentialsId: GIT_CREDENTIONALS_ID, url: GIT_REPOSITORY_DEP, branch: 'main'
+                
+                script {
+                    // [수정 포인트] sh 명령어가 정확히 들어가 있습니다.
+                    sh '''
+                    git config --global user.email ${GIT_EMAIL}
+                    git config --global user.name ${GIT_NAME}
+                    
+                    # sed 명령어로 test-dep.yml 파일의 이미지 태그 수정
+                    sed -i "s@${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:.*@${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:${BUILD_NUMBER}@g" test-dep.yml
+                    
+                    git add .
+                    git branch -M main
+                    git commit -m "fixed tag ${BUILD_NUMBER}"
+                    
+                    git remote remove origin || true
+                    git remote add origin ${GIT_REPOSITORY_DEP}
+                    
+                    git push origin main
+                    '''
+                }
+            }
+            post {
+                failure {
+                    sh "echo manifest update failed"
+                }
+                success {
+                    sh "echo manifest update success"
+                }
+            }
+        }
+    }
+}
