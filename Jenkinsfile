@@ -1,27 +1,31 @@
 pipeline {
     agent any
 
-  environment {
+    environment {
         TIME_ZONE = 'Asia/Seoul'
         
-        // GitHub 계정정보. 본인껄로 넣으세요!!
+        // GitHub 계정정보
         GIT_TARGET_BRANCH = 'main'
-        GIT_REPOSITORY_URL = 'https://github.com/monkeymagician/fast'
+        GIT_REPOSITORY_URL = 'https://github.com/monkeymagician/fast.git'
         GIT_CREDENTIONALS_ID = 'git_cre'
 
+        // [수정 1] 아래 변수 3개가 없어서 에러가 났었습니다. 추가했습니다.
+        // 배포용(Manifest) 파일이 있는 레포지토리 주소 (현재 같은 레포라면 위와 동일하게)
+        GIT_REPOSITORY_DEP = 'https://github.com/monkeymagician/fast.git' 
+        
+        // 깃 허브에 커밋할 때 기록될 이름과 이메일 (본인 것으로 수정하세요)
+        GIT_EMAIL = 'monkeymagician@example.com'
+        GIT_NAME = 'monkeymagician'
 
         // AWS ECR
         AWS_ECR_CREDENTIAL_ID = 'aws_cre'
         AWS_ECR_URI = '651109015678.dkr.ecr.ap-northeast-2.amazonaws.com'
         AWS_ECR_IMAGE_NAME = 'fast'
         AWS_REGION = 'ap-northeast-2'
-        
     }
 
-    
-   stages {
-        // 첫번째 스테이지 : 초기화.
-
+    stages {
+        // 첫번째 스테이지 : 초기화
         stage('1.init') {
             steps {
                 echo '1.init stage'
@@ -30,17 +34,13 @@ pipeline {
         }
 
         // 두번째 스테이지 : 소스코드 클론
-
         stage('2.Cloning Repository') {
             steps {
                 echo '2.Cloning Repository'
                 git branch: "${GIT_TARGET_BRANCH}",
                     credentialsId: "${GIT_CREDENTIONALS_ID}",
                     url: "${GIT_REPOSITORY_URL}"
-
-                // 깃플러그인 설치하면 마치 함수쓰듯 사용가능.
             }
-        
         }
 
         stage('3.Build Docker Image') {
@@ -51,16 +51,12 @@ pipeline {
                         docker build -t ${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:latest .
                     '''
                 }
-                // 명령어가 많아질것같아서 스크립트 블록을 추가.
-                // BUILD_NUMBER = 젠킨스가 제공해주는 변수.
             }
         }
 
-
         stage('4.Push to ECR') {
             steps {
-              // aws credential 플러그인을 설치해서 사용할 수 있는 함수. aws configure와 같은 기능.
-              withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: "${AWS_ECR_CREDENTIAL_ID}"]]) {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: "${AWS_ECR_CREDENTIAL_ID}"]]) {
                     script {
                         sh '''
                         aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ECR_URI}
@@ -82,60 +78,16 @@ pipeline {
                 }
                 success {
                     script {
-                   
                         sh '''
                         docker rm -f ${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:${BUILD_NUMBER}
                         docker rm -f ${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:latest
                         echo docker image push success
                         '''
                     }
-
                 }                
             }
         }
 
-       stage('5.EKS manifest file update') {
+        stage('5.EKS manifest file update') {
             steps {
-                git credentialsId: GIT_CREDENTIONALS_ID, url: GIT_REPOSITORY_DEP, branch: 'main'
-                script {
-                    '''
-                    git config --global user.email ${GIT_EMAIL}
-                    git config --global user.name ${GIT_NAME}
-                    sed -i 's@${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:.*@${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:${BUILD_NUMBER}@g' test-dep.yml
-                    git add .
-                    git branch -M main
-                    git commit -m 'fixed tag ${BUILD_NUMBER}'
-                    git remote remove origin
-                    git remote add origin ${GIT_REPOSITORY_DEP}
-                    git push origin main
-                    '''
-                }
-
-            }
-            post {
-                failure {
-                    sh "echo manifest update failed"
-                }
-                success {
-                    sh "echo manifest update success"
-                }
-            }
-        }
-
-
-
-
-
-    }
-}
-
-
-
-
-
-
-
-    
-
-
-
+                // 여기서 GIT_REPOSITORY_DEP
