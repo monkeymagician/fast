@@ -1,29 +1,32 @@
 pipeline {
     agent any
 
-    environment {
+  environment {
         TIME_ZONE = 'Asia/Seoul'
         
-        // [Fast App 리포지토리] (빌드용)
+        // GitHub 계정정보. 본인껄로 넣으세요!!
         GIT_TARGET_BRANCH = 'main'
-        GIT_REPOSITORY_URL = 'https://github.com/monkeymagician/fast.git'
+        GIT_REPOSITORY_URL = 'https://github.com/monkeymagician/fast'
         GIT_CREDENTIONALS_ID = 'git_cre'
 
-        // [Deployment 리포지토리] (배포 파일 수정용)
-        // ★ 중요: 여기에 test-dep.yml 파일이 있어야 합니다.
-        GIT_REPOSITORY_DEP = 'https://github.com/monkeymagician/deployment.git' 
-        
         GIT_EMAIL = '221csw2@gmail.com'
         GIT_NAME = 'monkeymagician'
+        GIT_REPOSITORY_DEP = 'git@github.com:monkeymagician/deployment.git'
+
 
         // AWS ECR
         AWS_ECR_CREDENTIAL_ID = 'aws_cre'
         AWS_ECR_URI = '651109015678.dkr.ecr.ap-northeast-2.amazonaws.com'
         AWS_ECR_IMAGE_NAME = 'fast'
         AWS_REGION = 'ap-northeast-2'
+        
     }
 
+    
     stages {
+        // 첫번째 스테이지 : 초기화.
+
+
         stage('1.init') {
             steps {
                 echo '1.init stage'
@@ -31,14 +34,23 @@ pipeline {
             }
         }
 
+
+        // 두번째 스테이지 : 소스코드 클론
+
+
         stage('2.Cloning Repository') {
             steps {
-                // 여기서는 fast 리포지토리를 가져옵니다 (소스 코드)
+                echo '2.Cloning Repository'
                 git branch: "${GIT_TARGET_BRANCH}",
                     credentialsId: "${GIT_CREDENTIONALS_ID}",
                     url: "${GIT_REPOSITORY_URL}"
+
+
+                // 깃플러그인 설치하면 마치 함수쓰듯 사용가능.
             }
+       
         }
+
 
         stage('3.Build Docker Image') {
             steps {
@@ -48,12 +60,18 @@ pipeline {
                         docker build -t ${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:latest .
                     '''
                 }
+                // 명령어가 많아질것같아서 스크립트 블록을 추가.
+                // BUILD_NUMBER = 젠킨스가 제공해주는 변수.
             }
         }
 
+
+
+
         stage('4.Push to ECR') {
             steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: "${AWS_ECR_CREDENTIAL_ID}"]]) {
+              // aws credential 플러그인을 설치해서 사용할 수 있는 함수. aws configure와 같은 기능.
+              withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: "${AWS_ECR_CREDENTIAL_ID}"]]) {
                     script {
                         sh '''
                         aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ECR_URI}
@@ -75,46 +93,38 @@ pipeline {
                 }
                 success {
                     script {
+                   
                         sh '''
                         docker rm -f ${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:${BUILD_NUMBER}
                         docker rm -f ${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:latest
                         echo docker image push success
                         '''
                     }
+
+
                 }                
             }
         }
 
-        // [여기가 핵심입니다]
+
         stage('5.EKS manifest file update') {
             steps {
-                // 1. 기존 fast 리포지토리 내용은 지우고 deployment 리포지토리를 새로 가져옵니다.
-                // deleteDir() // 안전하게 지우고 시작 (선택사항)
-                
-                // 2. Deployment 리포지토리 체크아웃 (주소 변경됨)
-                git branch: 'main',
-                    credentialsId: "${GIT_CREDENTIONALS_ID}",
-                    url: "${GIT_REPOSITORY_DEP}" // <-- deployment.git으로 접속
-                
+                git credentialsId: GIT_CREDENTIONALS_ID, url: GIT_REPOSITORY_DEP, branch: 'main'
                 script {
-                    sh '''
-                    echo "Current Directory Check:"
-                    ls -al  # test-dep.yml이 있는지 로그로 확인
-
+                    '''
                     git config --global user.email ${GIT_EMAIL}
                     git config --global user.name ${GIT_NAME}
-                    
-                    # 3. 이제 deployment 리포지토리 안에 있는 파일을 수정합니다.
-                    sed -i "s@${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:.*@${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:${BUILD_NUMBER}@g" test-dep.yml
-                    
+                    sed -i 's@${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:.*@${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:${BUILD_NUMBER}@g' test-dep.yml
                     git add .
                     git branch -M main
-                    git commit -m "fixed tag ${BUILD_NUMBER}"
-                    
-                    # 4. deployment 리포지토리에 푸시
+                    git commit -m 'fixed tag ${BUILD_NUMBER}'
+                    git remote remove origin
+                    git remote add origin ${GIT_REPOSITORY_DEP}
                     git push origin main
                     '''
                 }
+
+
             }
             post {
                 failure {
@@ -125,5 +135,28 @@ pipeline {
                 }
             }
         }
+
+
+
+
+
+
+
+
+
+
     }
 }
+
+
+
+
+
+
+
+
+
+    
+
+
+
