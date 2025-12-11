@@ -94,6 +94,41 @@ pipeline {
             }
         }
 
+       stage('5.EKS manifest file update') {
+            steps {
+                git credentialsId: GIT_CREDENTIONALS_ID, url: GIT_REPOSITORY_DEP, branch: 'main'
+                script {
+                    '''
+                    git config --global user.email ${GIT_EMAIL}
+                    git config --global user.name ${GIT_NAME}
+                    sed -i 's@${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:.*@${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:${BUILD_NUMBER}@g' test-dep.yml
+                    git add .
+                    git branch -M main
+                    git commit -m 'fixed tag ${BUILD_NUMBER}'
+                    git remote remove origin
+                    git remote add origin ${GIT_REPOSITORY_DEP}
+                    git push origin main
+                    '''
+                }
+
+            }
+            post {
+                failure {
+                    sh "echo manifest update failed"
+                }
+                success {
+                    sh "echo manifest update success"
+                }
+            }
+        }
+
+
+
+
+
+    }
+}
+
 
 
 
