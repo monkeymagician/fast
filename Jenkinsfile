@@ -18,27 +18,30 @@ pipeline {
         
     }
 
-    stages {
+    
+   stages {
+        // 첫번째 스테이지 : 초기화.
 
-        stage('init') {
+        stage('1.init') {
             steps {
-                echo 'init stage'
+                echo '1.init stage'
                 deleteDir()
             }
         }
 
-        stage('Cloning Repository') {
+        // 두번째 스테이지 : 소스코드 클론
+
+        stage('2.Cloning Repository') {
             steps {
-                echo 'Cloning Repository'
+                echo '2.Cloning Repository'
                 git branch: "${GIT_TARGET_BRANCH}",
                     credentialsId: "${GIT_CREDENTIONALS_ID}",
                     url: "${GIT_REPOSITORY_URL}"
+
+                // 깃플러그인 설치하면 마치 함수쓰듯 사용가능.
             }
+        
         }
-
-
-    }
-}
 
         stage('3.Build Docker Image') {
             steps {
@@ -53,9 +56,10 @@ pipeline {
             }
         }
 
+
         stage('4.Push to ECR') {
             steps {
-            // AWS Credential 플러그인을 설치해서 사용할 수 있는 함수. aws configure와 같음
+              // aws credential 플러그인을 설치해서 사용할 수 있는 함수. aws configure와 같은 기능.
               withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: "${AWS_ECR_CREDENTIAL_ID}"]]) {
                     script {
                         sh '''
@@ -89,13 +93,6 @@ pipeline {
                 }                
             }
         }
-        
-
-
-
-
-
-    
 
 
 
@@ -104,3 +101,8 @@ pipeline {
 
     }
 }
+
+    
+
+
+
