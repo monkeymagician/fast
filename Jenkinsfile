@@ -9,12 +9,14 @@ pipeline {
         GIT_REPOSITORY_URL = 'https://github.com/monkeymagician/fast.git'
         GIT_CREDENTIONALS_ID = 'git_cre'
 
-        // [중요] 배포용(Manifest) 파일이 있는 레포지토리 주소
-        GIT_REPOSITORY_DEP = 'https://github.com/monkeymagician/fast.git' 
-        
-        // [중요] 깃 허브 커밋용 이메일/이름
-        GIT_EMAIL = 'monkeymagician@example.com'
+        // [수정 1] 본인 이메일 적용됨
+        GIT_EMAIL = '221csw2@gmail.com'
         GIT_NAME = 'monkeymagician'
+        
+        // [수정 2] 주소를 SSH(git@...)에서 HTTPS로 변경하고, 'fast' 레포지토리로 통일했습니다.
+        // (별도의 deployment 레포지토리가 있고 SSH키 설정을 하신 게 아니라면, 아래 주소를 쓰셔야 합니다)
+        GIT_REPOSITORY_DEP = 'https://github.com/monkeymagician/fast.git'
+
 
         // AWS ECR
         AWS_ECR_CREDENTIAL_ID = 'aws_cre'
@@ -89,21 +91,24 @@ pipeline {
 
         stage('5.EKS manifest file update') {
             steps {
+                // 수정된 HTTPS 주소로 자격증명(git_cre)을 사용하여 접속
                 git credentialsId: GIT_CREDENTIONALS_ID, url: GIT_REPOSITORY_DEP, branch: 'main'
                 
                 script {
-                    // [수정 포인트] sh 명령어가 정확히 들어가 있습니다.
+                    // [수정 3] 여기에 'sh'가 빠져 있어서 실행이 안 됐습니다. 추가했습니다!
                     sh '''
                     git config --global user.email ${GIT_EMAIL}
                     git config --global user.name ${GIT_NAME}
                     
-                    # sed 명령어로 test-dep.yml 파일의 이미지 태그 수정
+                    # [수정 4] sed 명령어 안의 변수가 잘 작동하도록 쌍따옴표(")로 감쌌습니다.
+                    # test-dep.yml 파일이 존재하는지 꼭 확인해주세요.
                     sed -i "s@${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:.*@${AWS_ECR_URI}/${AWS_ECR_IMAGE_NAME}:${BUILD_NUMBER}@g" test-dep.yml
                     
                     git add .
                     git branch -M main
                     git commit -m "fixed tag ${BUILD_NUMBER}"
                     
+                    # 리모트 재설정 (에러 방지용 || true 추가)
                     git remote remove origin || true
                     git remote add origin ${GIT_REPOSITORY_DEP}
                     
